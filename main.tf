@@ -15,7 +15,7 @@ locals {
 resource "aws_ssm_maintenance_window" "this" {
   name                       = var.name
   description                = var.description
-  schedule                   = var.schedule
+  schedule                   = trimspace(var.schedule)
   schedule_timezone          = var.schedule_timezone
   duration                   = var.duration
   cutoff                     = var.cutoff

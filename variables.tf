@@ -18,6 +18,11 @@ variable "schedule" {
   description = "Cron/rate/at expression. For a one-time run use e.g. at(2026-12-04T05:43:00)."
   type        = string
   default     = "cron(43 05 ? * FRI#1 *)"
+
+  validation {
+    condition     = can(regex("^(cron|rate|at)\\(.+\\)$", trimspace(var.schedule)))
+    error_message = "schedule must be wrapped like cron(43 05 ? * FRI#1 *), rate(7 days) or at(2026-12-04T05:43:00)."
+  }
 }
 
 variable "schedule_timezone" {
