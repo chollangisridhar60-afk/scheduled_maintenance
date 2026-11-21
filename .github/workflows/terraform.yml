@@ -23,6 +23,25 @@ on:
           - us-east-2 # Ohio
           - us-west-1 # N. California
           - us-west-2 # Oregon
+      schedule:
+        description: "Cron/rate/at expression (e.g. cron(43 05 ? * FRI#1 *) or at(2026-12-04T05:43:00))"
+        required: true
+        default: "cron(43 05 ? * FRI#1 *)"
+        type: string
+
+      advisory_id:
+        description: "Amazon Linux advisory (e.g. ALAS2023-2026-3478 or ALAS2-2026-4123)"
+        required: true
+        type: string
+      releasever:
+        description: "AL2023 --releasever (e.g. 2023.12.20261117, or latest). Ignored on AL2"
+        required: true
+        default: "latest"
+        type: string
+      packages:
+        description: "Package names, comma-separated (e.g. java-17-amazon-corretto)"
+        required: true
+        type: string
 
 permissions:
   id-token: write # OIDC to AWS
@@ -56,12 +75,21 @@ jobs:
           TAG_KEY: ${{ inputs.target_tag_key }}
           TAG_VALUES: ${{ inputs.target_tag_values }}
           REGION: ${{ inputs.aws_region }}
+          SCHEDULE: ${{ inputs.schedule }}
+          ADVISORY_ID: ${{ inputs.advisory_id }}
+          RELEASEVER: ${{ inputs.releasever }}
+          PACKAGES: ${{ inputs.packages }}
         run: |
+          PACKAGES_JSON=$(printf '%s' "$PACKAGES" | jq -Rc 'split(",") | map(gsub("^\\s+|\\s+$";"")) | map(select(length>0))')
           VALUES_JSON=$(printf '%s' "$TAG_VALUES" | jq -Rc 'if startswith("[") then fromjson else split(",") | map(gsub("^\\s+|\\s+$";"")) | map(select(length>0)) end')
           echo "TF_VAR_region=$REGION" >> "$GITHUB_ENV"
+          echo "TF_VAR_schedule=$SCHEDULE" >> "$GITHUB_ENV"
+          echo "TF_VAR_advisory_id=$ADVISORY_ID" >> "$GITHUB_ENV"
+          echo "TF_VAR_releasever=$RELEASEVER" >> "$GITHUB_ENV"
+          echo "TF_VAR_patch_packages=$PACKAGES_JSON" >> "$GITHUB_ENV"
           echo "TF_VAR_target_tag_key=$TAG_KEY" >> "$GITHUB_ENV"
           echo "TF_VAR_target_tag_values=$VALUES_JSON" >> "$GITHUB_ENV"
-          echo "Targeting tag:${TAG_KEY} = ${VALUES_JSON} in ${REGION}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Targeting tag:${TAG_KEY} = ${VALUES_JSON} in ${REGION}, schedule ${SCHEDULE}, patching ${ADVISORY_ID} (${RELEASEVER}) on ${PACKAGES_JSON}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Format check
         run: terraform fmt -check -recursive

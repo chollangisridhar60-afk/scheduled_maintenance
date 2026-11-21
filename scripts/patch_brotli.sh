@@ -1,57 +1,64 @@
 #!/bin/bash
-# Patch CVE-2026-114938 (OpenJDK Base64 decoder memory corruption, Corretto 17/21/25/27)
-#   AL2023: ALAS2023-2026-3478 (17), -3479 (21), -3480 (25), -3481 (27)
-#   AL2   : ALAS2-2026-4123 (17 only)
+# Patch ONE Amazon Linux advisory on the packages passed in by the pipeline.
 # Intended for SSM Run Command (AWS-RunShellScript) in a maintenance window.
-# No-op if none of the affected packages are installed.
-# Optional env: RELEASEVER (AL2023 only, default "latest").
-#   RESTART_SERVICES=0  skip restarts (default 1: restart systemd services whose JVM still runs the old
-#                       libjvm). A stale ActiveMQ that was started outside systemd is restarted through
-#                       activemq.service when that unit exists; any other non-service JVM is listed for manual restart.
+# Inputs (exported by a preamble that Terraform prepends; see main.tf):
+#   ADVISORY   required  e.g. ALAS2023-2026-3478 (AL2023) or ALAS2-2026-4123 (AL2)
+#   PACKAGES   required  space-separated package names; every installed package whose name
+#                        starts with one of them is updated (e.g. "java-17-amazon-corretto"
+#                        also covers -headless, -devel, -jmods, ...)
+#   RELEASEVER optional  AL2023 only, e.g. 2023.12.20261117 (default "latest")
+#   RESTART_SERVICES=0   skip restarts (default 1: restart systemd services whose JVM still runs the old
+#                        libjvm). A stale ActiveMQ that was started outside systemd is restarted through
+#                        activemq.service when that unit exists; any other non-service JVM is listed for manual restart.
+# No-op if the advisory belongs to the other Amazon Linux version or no listed package is installed.
 # Exit codes: 0 ok, 1 update/restart failed, 2 stale JVMs remain after restart.
 set -uo pipefail
+log() { echo "[$(date -u +%FT%TZ)] $*"; }
+ADVISORY="${ADVISORY:-}"
+PACKAGES="${PACKAGES:-}"
 RELEASEVER="${RELEASEVER:-latest}"
 RESTART_SERVICES="${RESTART_SERVICES:-1}"
-log() { echo "[$(date -u +%FT%TZ)] $*"; }
-# major version -> advisory, per platform
-declare -A ADV_AL2023=( [17]="ALAS2023-2026-3478" [21]="ALAS2023-2026-3479" [25]="ALAS2023-2026-3480" [27]="ALAS2023-2026-3481" )
-declare -A ADV_AL2=( [17]="ALAS2-2026-4123" )
+if [ -z "$ADVISORY" ] || [ -z "$PACKAGES" ]; then
+  log "ERROR: ADVISORY and PACKAGES must be set."; exit 1
+fi
 if grep -q 'PLATFORM_ID="platform:al2023"' /etc/os-release; then
-  PLATFORM=al2023; PM=dnf; declare -n ADV=ADV_AL2023
+  PLATFORM=al2023; PM=dnf
 elif grep -q '^PRETTY_NAME="Amazon Linux 2"' /etc/os-release; then
-  PLATFORM=al2; PM=yum; declare -n ADV=ADV_AL2
+  PLATFORM=al2; PM=yum
 else
   log "Not Amazon Linux 2/2023, nothing to do."; exit 0
 fi
+case "$ADVISORY" in
+  ALAS2023-*) WANT=al2023 ;;
+  ALAS2-*)    WANT=al2 ;;
+  *) log "ERROR: unrecognised advisory '$ADVISORY'."; exit 1 ;;
+esac
+if [ "$PLATFORM" != "$WANT" ]; then
+  log "${ADVISORY} is for ${WANT}, this host is ${PLATFORM}; nothing to do."; exit 0
+fi
 RC=0
 PATCHED=0
-for major in 17 21 25 27; do
-  # all subpackages (headless, devel, jmods, ...) of this Corretto major
-  mapfile -t PKGS < <(rpm -qa --qf '%{NAME}\n' "java-${major}-amazon-corretto*" | sort -u)
-  [ ${#PKGS[@]} -eq 0 ] && continue
-  advisory="${ADV[$major]:-}"
-  if [ -z "$advisory" ]; then
-    log "Corretto ${major} installed but no advisory for ${PLATFORM}; skipping."
-    continue
-  fi
-  log "Corretto ${major} installed: $(rpm -q "${PKGS[@]}" | tr '\n' ' ')"
-  log "Applying ${advisory} to: ${PKGS[*]}"
-  if [ "$PLATFORM" = al2023 ]; then
-    "$PM" -y update --advisory "$advisory" --releasever "$RELEASEVER" "${PKGS[@]}"
-  else
-    "$PM" -y update --advisory "$advisory" "${PKGS[@]}"
-  fi
-  if [ $? -ne 0 ]; then
-    log "ERROR: ${PM} update failed for Corretto ${major}."
-    RC=1
-    continue
-  fi
+# all installed packages (incl. subpackages) matching the requested names
+PKGS=()
+while read -r n; do
+  [ -n "$n" ] && PKGS+=("$n")
+done < <(for p in $PACKAGES; do rpm -qa --qf '%{NAME}\n' "${p}*"; done | sort -u)
+if [ ${#PKGS[@]} -eq 0 ]; then
+  log "None of (${PACKAGES}) are installed. Nothing to do."; exit 0
+fi
+log "Installed: $(rpm -q "${PKGS[@]}" | tr '\n' ' ')"
+log "Applying ${ADVISORY} to: ${PKGS[*]}"
+if [ "$PLATFORM" = al2023 ]; then
+  "$PM" -y update --advisory "$ADVISORY" --releasever "$RELEASEVER" "${PKGS[@]}"
+else
+  "$PM" -y update --advisory "$ADVISORY" "${PKGS[@]}"
+fi
+if [ $? -ne 0 ]; then
+  log "ERROR: ${PM} update failed."
+  RC=1
+else
   PATCHED=1
   log "Post-update: $(rpm -q "${PKGS[@]}" | tr '\n' ' ')"
-done
-if [ $PATCHED -eq 0 ] && [ $RC -eq 0 ]; then
-  log "No affected Corretto 17/21/25/27 packages installed. Nothing to do."
-  exit 0
 fi
 # Running JVMs keep the old libjvm mapped until restarted
 stale_jvms() {  # prints "pid unit" for every java process with the old libjvm mapped

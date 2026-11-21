@@ -1,3 +1,16 @@
+locals {
+  # The script is sent as-is, preceded by exports for the pipeline parameters.
+  # The shebang must stay on line 1, so the script's own first line is dropped and re-added.
+  # Inputs are charset-validated in variables.tf, so single-quoting here is safe.
+  patch_commands = join("\n", [
+    "#!/bin/bash",
+    "export ADVISORY='${var.advisory_id}'",
+    "export RELEASEVER='${var.releasever}'",
+    "export PACKAGES='${join(" ", var.patch_packages)}'",
+    replace(file("${path.module}/scripts/patch_brotli.sh"), "/^#![^\\n]*\\n/", ""),
+  ])
+}
+
 resource "aws_ssm_maintenance_window" "this" {
   name                       = var.name
   description                = var.description
@@ -41,7 +54,7 @@ resource "aws_ssm_maintenance_window_task" "patch" {
 
       parameter {
         name   = "commands"
-        values = [file("${path.module}/scripts/patch_brotli.sh")]
+        values = [local.patch_commands]
       }
       parameter {
         name   = "executionTimeout"
