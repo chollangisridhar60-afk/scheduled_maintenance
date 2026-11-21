@@ -4,9 +4,8 @@ on:
   workflow_dispatch:
     inputs:
       target_tags:
-        description: "Target tags as key=value1,value2 ; key2=value (e.g. Patch Group=qa-ema-rest;env=dev). Instances must match ALL keys"
+        description: "Target tags as key=value1 ; key2=value (e.g. env=dev;name=test)"
         required: true
-        default: "Patch Group=qa-ema-rest"
         type: string
       aws_region:
         description: "AWS region"
