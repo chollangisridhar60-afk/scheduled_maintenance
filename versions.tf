@@ -1,5 +1,13 @@
 terraform {
-  required_version = ">= 1.3.0"
+  backend "s3" {
+    bucket       = "tfstate-707582904453-us-west-2-scheduled-maintenance"
+    key          = "scheduled-maintenance/terraform.tfstate"
+    region       = "us-west-2"
+    encrypt      = true
+    use_lockfile = true # S3 native locking (Terraform >= 1.10), no DynamoDB needed
+  }
+
+  required_version = ">= 1.10.0"
   required_providers {
     aws = {
       source  = "hashicorp/aws"
