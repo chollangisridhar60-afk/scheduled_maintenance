@@ -6,17 +6,14 @@ on:
       target_tag_key:
         description: "Tag key used to select instances (e.g. Patch Group)"
         required: true
-        default: "env"
         type: string
       target_tag_values:
         description: "Tag values, comma-separated (e.g. qa-ema-rest or qa-ema-rest,qa-ema-web)"
         required: true
-        default: "dev"
         type: string
       aws_region:
         description: "AWS region"
         required: true
-        default: "us-west-2"
         type: choice
         options:
           - us-east-1 # N. Virginia
@@ -26,7 +23,6 @@ on:
       schedule:
         description: "Cron/rate/at expression (e.g. cron(43 05 ? * FRI#1 *) or at(2026-12-04T05:43:00))"
         required: true
-        default: "cron(43 05 ? * FRI#1 *)"
         type: string
 
       advisory_id:
@@ -36,7 +32,6 @@ on:
       releasever:
         description: "AL2023 --releasever (e.g. 2023.12.20261117, or latest). Ignored on AL2"
         required: true
-        default: "latest"
         type: string
       packages:
         description: "Package names, comma-separated (e.g. java-17-amazon-corretto)"
@@ -45,7 +40,6 @@ on:
       restart_services:
         description: "Auto-restart only services still running replaced files of the patched packages (untick to never restart)"
         required: true
-        default: true
         type: boolean
 
 permissions:
