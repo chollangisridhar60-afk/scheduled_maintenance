@@ -7,7 +7,8 @@
 #                        starts with one of them is updated (e.g. "java-17-amazon-corretto"
 #                        also covers -headless, -devel, -jmods, ...)
 #   RELEASEVER optional  AL2023 only, e.g. 2023.12.20261117 (default "latest")
-#   RESTART_SERVICES=0   skip restarts (default 1: restart systemd services whose JVM still runs the old
+#   RESTART_SERVICES=0   skip restarts, use for packages that need none (e.g. brotli) so apps see no downtime
+#                        (default 1: restart systemd services whose JVM still runs the old
 #                        libjvm). A stale ActiveMQ that was started outside systemd is restarted through
 #                        activemq.service when that unit exists; any other non-service JVM is listed for manual restart.
 # No-op if the advisory belongs to the other Amazon Linux version or no listed package is installed.
@@ -94,6 +95,8 @@ elif [ $RC -ne 0 ]; then
   log "Update errors occurred; skipping service restarts."
 elif [ "$RESTART_SERVICES" != 1 ]; then
   log "RESTART_SERVICES=0: restarts skipped. Services: ${STALE_UNITS[*]:-none}; non-service JVMs (pid:scope): ${MANUAL[*]:-none}"
+  log "WARNING: patched packages are NOT active until these are restarted."
+  [ $RC -eq 0 ] && RC=2
 else
   for u in $(printf '%s\n' "${STALE_UNITS[@]}" | sort -u); do
     log "Restarting $u"

@@ -3,3 +3,4 @@ target_tag_values = ["qa-ema-rest"]
 advisory_id       = "ALAS2023-2026-3478"
 releasever        = "2023.12.20261117"
 patch_packages    = ["java-17-amazon-corretto"]
+restart_services  = true # set false for packages that need no restart (e.g. brotli)

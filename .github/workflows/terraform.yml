@@ -42,6 +42,11 @@ on:
         description: "Package names, comma-separated (e.g. java-17-amazon-corretto)"
         required: true
         type: string
+      restart_services:
+        description: "Restart services still using old libraries after patching (Java: yes; brotli etc.: no)"
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   id-token: write # OIDC to AWS
@@ -79,6 +84,7 @@ jobs:
           ADVISORY_ID: ${{ inputs.advisory_id }}
           RELEASEVER: ${{ inputs.releasever }}
           PACKAGES: ${{ inputs.packages }}
+          RESTART_SERVICES: ${{ inputs.restart_services }}
         run: |
           PACKAGES_JSON=$(printf '%s' "$PACKAGES" | jq -Rc 'split(",") | map(gsub("^\\s+|\\s+$";"")) | map(select(length>0))')
           VALUES_JSON=$(printf '%s' "$TAG_VALUES" | jq -Rc 'if startswith("[") then fromjson else split(",") | map(gsub("^\\s+|\\s+$";"")) | map(select(length>0)) end')
@@ -87,9 +93,10 @@ jobs:
           echo "TF_VAR_advisory_id=$ADVISORY_ID" >> "$GITHUB_ENV"
           echo "TF_VAR_releasever=$RELEASEVER" >> "$GITHUB_ENV"
           echo "TF_VAR_patch_packages=$PACKAGES_JSON" >> "$GITHUB_ENV"
+          echo "TF_VAR_restart_services=$RESTART_SERVICES" >> "$GITHUB_ENV"
           echo "TF_VAR_target_tag_key=$TAG_KEY" >> "$GITHUB_ENV"
           echo "TF_VAR_target_tag_values=$VALUES_JSON" >> "$GITHUB_ENV"
-          echo "Targeting tag:${TAG_KEY} = ${VALUES_JSON} in ${REGION}, schedule ${SCHEDULE}, patching ${ADVISORY_ID} (${RELEASEVER}) on ${PACKAGES_JSON}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Targeting tag:${TAG_KEY} = ${VALUES_JSON} in ${REGION}, schedule ${SCHEDULE}, patching ${ADVISORY_ID} (${RELEASEVER}) on ${PACKAGES_JSON}, restart services: ${RESTART_SERVICES}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Format check
         run: terraform fmt -check -recursive

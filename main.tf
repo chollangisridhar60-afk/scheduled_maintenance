@@ -7,6 +7,7 @@ locals {
     "export ADVISORY='${var.advisory_id}'",
     "export RELEASEVER='${var.releasever}'",
     "export PACKAGES='${join(" ", var.patch_packages)}'",
+    "export RESTART_SERVICES='${var.restart_services ? 1 : 0}'",
     replace(file("${path.module}/scripts/patch_brotli.sh"), "/^#![^\\n]*\\n/", ""),
   ])
 }

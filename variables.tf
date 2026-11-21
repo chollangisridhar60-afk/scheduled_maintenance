@@ -120,3 +120,9 @@ variable "patch_packages" {
     error_message = "patch_packages needs at least one name made only of letters, digits and . _ + -"
   }
 }
+
+variable "restart_services" {
+  description = "Restart services still running old libraries after patching (true for Java; false for packages like brotli to avoid app downtime)"
+  type        = bool
+  default     = true
+}
