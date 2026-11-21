@@ -7,12 +7,13 @@
 #                        starts with one of them is updated (e.g. "java-17-amazon-corretto"
 #                        also covers -headless, -devel, -jmods, ...)
 #   RELEASEVER optional  AL2023 only, e.g. 2023.12.20261117 (default "latest")
-#   RESTART_SERVICES=0   skip restarts, use for packages that need none (e.g. brotli) so apps see no downtime
-#                        (default 1: restart systemd services whose JVM still runs the old
-#                        libjvm). A stale ActiveMQ that was started outside systemd is restarted through
+#   RESTART_SERVICES     1 (default): after patching, restart ONLY services whose running processes still
+#                        map a replaced file of the patched packages (Java -> libjvm; brotli -> usually none,
+#                        so no downtime). 0: never restart, just report (exit 2 if anything is still stale).
+#                        A stale ActiveMQ that was started outside systemd is restarted through
 #                        activemq.service when that unit exists; any other non-service JVM is listed for manual restart.
 # No-op if the advisory belongs to the other Amazon Linux version or no listed package is installed.
-# Exit codes: 0 ok, 1 update/restart failed, 2 stale JVMs remain after restart.
+# Exit codes: 0 ok, 1 update/restart failed, 2 processes still run old files (restart skipped or failed).
 set -uo pipefail
 log() { echo "[$(date -u +%FT%TZ)] $*"; }
 ADVISORY="${ADVISORY:-}"
@@ -47,6 +48,8 @@ done < <(for p in $PACKAGES; do rpm -qa --qf '%{NAME}\n' "${p}*"; done | sort -u
 if [ ${#PKGS[@]} -eq 0 ]; then
   log "None of (${PACKAGES}) are installed. Nothing to do."; exit 0
 fi
+FILELIST=$(mktemp); trap 'rm -f "$FILELIST"' EXIT
+rpm -ql "${PKGS[@]}" 2>/dev/null >> "$FILELIST"   # files of the OLD versions
 log "Installed: $(rpm -q "${PKGS[@]}" | tr '\n' ' ')"
 log "Applying ${ADVISORY} to: ${PKGS[*]}"
 if [ "$PLATFORM" = al2023 ]; then
@@ -59,25 +62,29 @@ if [ $? -ne 0 ]; then
   RC=1
 else
   PATCHED=1
+  rpm -ql "${PKGS[@]}" 2>/dev/null >> "$FILELIST" # files of the NEW versions
   log "Post-update: $(rpm -q "${PKGS[@]}" | tr '\n' ' ')"
 fi
-# Running JVMs keep the old libjvm mapped until restarted
-stale_jvms() {  # prints "pid unit" for every java process with the old libjvm mapped
+# Running processes keep the OLD file mapped (shown as "(deleted)") until restarted.
+# Only processes that map a replaced file of the packages patched above count, so a package
+# that needs no restart (e.g. brotli with no running user) restarts nothing.
+sort -u -o "$FILELIST" "$FILELIST"
+stale_procs() {  # prints "pid unit" for every process still mapping a replaced file
   local pid
-  for pid in $(pgrep -x java 2>/dev/null); do
-    if grep -q 'libjvm.so (deleted)' "/proc/$pid/maps" 2>/dev/null; then
-      echo "$pid $(ps -o unit= -p "$pid" 2>/dev/null | tr -d ' ')"
-    fi
+  for pid in $(ls /proc | grep -E '^[0-9]+$'); do
+    [ "$pid" = "$$" ] && continue
+    awk '/ \(deleted\)$/ {print $6}' "/proc/$pid/maps" 2>/dev/null | grep -qxFf "$FILELIST" || continue
+    echo "$pid $(ps -o unit= -p "$pid" 2>/dev/null | tr -d ' ')"
   done
 }
 STALE=0
 STALE_UNITS=()
 MANUAL=()
-log "Java processes still using a replaced JDK:"
+log "Processes still using replaced files of the patched packages:"
 while read -r pid unit; do
   [ -z "$pid" ] && continue
   STALE=1
-  log "  PID $pid (${unit:-no unit}) running stale JVM"
+  log "  PID $pid ($(ps -o comm= -p "$pid" 2>/dev/null); ${unit:-no unit}) running old files"
   if [[ "$unit" == *.service ]]; then
     STALE_UNITS+=("$unit")
   elif tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | grep -q 'activemq' \
@@ -88,14 +95,14 @@ while read -r pid unit; do
   else
     MANUAL+=("$pid:${unit:-none}")
   fi
-done < <(stale_jvms)
+done < <(stale_procs)
 if [ $STALE -eq 0 ]; then
-  log "No stale JVMs."
+  log "None. No service restart needed."
 elif [ $RC -ne 0 ]; then
   log "Update errors occurred; skipping service restarts."
 elif [ "$RESTART_SERVICES" != 1 ]; then
-  log "RESTART_SERVICES=0: restarts skipped. Services: ${STALE_UNITS[*]:-none}; non-service JVMs (pid:scope): ${MANUAL[*]:-none}"
-  log "WARNING: patched packages are NOT active until these are restarted."
+  log "RESTART_SERVICES=0: restarts skipped. Services: ${STALE_UNITS[*]:-none}; other processes (pid:scope): ${MANUAL[*]:-none}"
+  log "WARNING: patched packages are NOT active in these processes until they are restarted."
   [ $RC -eq 0 ] && RC=2
 else
   for u in $(printf '%s\n' "${STALE_UNITS[@]}" | sort -u); do
@@ -104,13 +111,18 @@ else
   done
   [ ${#MANUAL[@]} -gt 0 ] && log "MANUAL RESTART NEEDED (not a systemd service) pid:scope -> ${MANUAL[*]}"
   sleep 5
-  REMAIN=$(stale_jvms | awk '{print $1}' | tr '\n' ' ')
+  REMAIN=$(stale_procs | awk '{print $1}' | tr '\n' ' ')
   if [ -n "$REMAIN" ]; then
-    log "Still on old JVM: PIDs ${REMAIN}"
+    log "Still on old files: PIDs ${REMAIN}"
     [ $RC -eq 0 ] && RC=2
   else
-    log "No stale JVMs remain."
+    log "No stale processes remain."
   fi
+fi
+# Kernel/glibc/systemd-type updates need a reboot, never done automatically here (informational only)
+if [ "$PLATFORM" = al2023 ]; then NR="dnf needs-restarting"; else NR="needs-restarting"; fi
+if $NR --help >/dev/null 2>&1 && ! $NR -r >/dev/null 2>&1; then
+  log "NOTE: the system reports a REBOOT is required (needs-restarting -r). Schedule one."
 fi
 log "Done."
 exit $RC

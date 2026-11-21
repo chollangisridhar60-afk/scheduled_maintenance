@@ -122,7 +122,7 @@ variable "patch_packages" {
 }
 
 variable "restart_services" {
-  description = "Restart services still running old libraries after patching (true for Java; false for packages like brotli to avoid app downtime)"
+  description = "true: after patching, restart only services still running replaced files of the patched packages (none for packages that need no restart). false: never restart, only report"
   type        = bool
   default     = true
 }

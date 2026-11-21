@@ -43,7 +43,7 @@ on:
         required: true
         type: string
       restart_services:
-        description: "Restart services still using old libraries after patching (Java: yes; brotli etc.: no)"
+        description: "Auto-restart only services still running replaced files of the patched packages (untick to never restart)"
         required: true
         default: true
         type: boolean
