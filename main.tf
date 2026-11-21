@@ -13,6 +13,8 @@ locals {
 }
 
 resource "aws_ssm_maintenance_window" "this" {
+  region = var.region
+
   name                       = trimspace(var.name)
   description                = coalesce(var.description, trimspace(var.name))
   schedule                   = trimspace(var.schedule)
@@ -25,6 +27,8 @@ resource "aws_ssm_maintenance_window" "this" {
 }
 
 resource "aws_ssm_maintenance_window_target" "this" {
+  region = var.region
+
   window_id     = aws_ssm_maintenance_window.this.id
   resource_type = "INSTANCE"
 
@@ -38,6 +42,8 @@ resource "aws_ssm_maintenance_window_target" "this" {
 }
 
 resource "aws_ssm_maintenance_window_task" "patch" {
+  region = var.region
+
   window_id        = aws_ssm_maintenance_window.this.id
   task_type        = "RUN_COMMAND"
   task_arn         = "AWS-RunShellScript"

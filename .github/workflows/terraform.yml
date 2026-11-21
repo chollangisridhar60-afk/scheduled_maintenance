@@ -51,7 +51,7 @@ env:
   TF_IN_AUTOMATION: "true"
 
 concurrency:
-  group: terraform-${{ github.ref }}
+  group: terraform-${{ inputs.aws_region }}
   cancel-in-progress: false
 
 jobs:
@@ -104,7 +104,9 @@ jobs:
         run: terraform fmt -check -recursive
 
       - name: Init
-        run: terraform init -input=false
+        env:
+          REGION: ${{ inputs.aws_region }}
+        run: terraform init -input=false -backend-config="key=scheduled-maintenance/${REGION}/terraform.tfstate"
 
       - name: Validate
         run: terraform validate
@@ -143,7 +145,9 @@ jobs:
           name: tfplan
 
       - name: Init
-        run: terraform init -input=false
+        env:
+          REGION: ${{ inputs.aws_region }}
+        run: terraform init -input=false -backend-config="key=scheduled-maintenance/${REGION}/terraform.tfstate"
 
       - name: Apply
         run: terraform apply -input=false -auto-approve tfplan
