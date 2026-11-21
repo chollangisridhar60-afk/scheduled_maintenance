@@ -1,23 +1,32 @@
 variable "region" {
-  type    = string
-  default = "us-west-2"
+  description = "AWS region for the maintenance window, supplied by the pipeline's aws_region input"
+  type        = string
+
+  validation {
+    condition     = contains(["us-east-1", "us-east-2", "us-west-1", "us-west-2"], var.region)
+    error_message = "region must be one of us-east-1, us-east-2, us-west-1, us-west-2."
+  }
 }
 
 variable "name" {
-  description = "Maintenance window name"
+  description = "Maintenance window name, supplied by the pipeline input (3-128 chars: letters, digits, . _ -)"
   type        = string
-  default     = "CVE-2026-111497"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_.-]{3,128}$", trimspace(var.name)))
+    error_message = "name must be 3-128 characters using only letters, digits, '.', '_' and '-' (no spaces)."
+  }
 }
 
 variable "description" {
-  type    = string
-  default = "CVE-2026-111497"
+  description = "Maintenance window description. Defaults to the window name."
+  type        = string
+  default     = null
 }
 
 variable "schedule" {
-  description = "Cron/rate/at expression. UTC: Saturday, Nov 21, 2026 — 10:49 AM."
+  description = "Cron/rate/at expression, supplied by the pipeline input. For a one-time run use e.g. at(2026-12-04T05:43:00)."
   type        = string
-  default     = "cron(51 5 ? * SAT#3 *)"
 
   validation {
     condition     = can(regex("^(cron|rate|at)\\(.+\\)$", trimspace(var.schedule)))

@@ -7,6 +7,11 @@ on:
         description: "Target tags as key=value1 ; key2=value (e.g. env=dev;name=test)"
         required: true
         type: string
+      window_name:
+        description: "Maintenance window name (e.g. CVE-2026-114938). Letters, digits, . _ - only"
+        required: true
+        default: "CVE-2026-114938"
+        type: string
       aws_region:
         description: "AWS region"
         required: true
@@ -70,13 +75,14 @@ jobs:
           TARGET_TAGS: ${{ inputs.target_tags }}
           REGION: ${{ inputs.aws_region }}
           SCHEDULE: ${{ inputs.schedule }}
+          WINDOW_NAME: ${{ inputs.window_name }}
           ADVISORY_ID: ${{ inputs.advisory_id }}
           RELEASEVER: ${{ inputs.releasever }}
           PACKAGES: ${{ inputs.packages }}
           RESTART_SERVICES: ${{ inputs.restart_services }}
         run: |
           trim() { printf '%s' "$1" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//'; }
-          SCHEDULE=$(trim "$SCHEDULE"); ADVISORY_ID=$(trim "$ADVISORY_ID"); RELEASEVER=$(trim "$RELEASEVER")
+          SCHEDULE=$(trim "$SCHEDULE"); ADVISORY_ID=$(trim "$ADVISORY_ID"); RELEASEVER=$(trim "$RELEASEVER"); WINDOW_NAME=$(trim "$WINDOW_NAME")
           PACKAGES_JSON=$(printf '%s' "$PACKAGES" | jq -Rc 'split(",") | map(gsub("^\\s+|\\s+$";"")) | map(select(length>0))')
           case "$TARGET_TAGS" in
             "{"*) ;;
@@ -86,12 +92,13 @@ jobs:
           TAGS_JSON=$(printf '%s' "$TARGET_TAGS" | jq -Rc 'if startswith("{") then fromjson else split(";") | map(select(length>0)) | map(split("=")) | map({key:(.[0]|gsub("^\\s+|\\s+$";"")), value:((.[1] // "")|split(",")|map(gsub("^\\s+|\\s+$";""))|map(select(length>0)))}) | from_entries end')
           echo "TF_VAR_region=$REGION" >> "$GITHUB_ENV"
           echo "TF_VAR_schedule=$SCHEDULE" >> "$GITHUB_ENV"
+          echo "TF_VAR_name=$WINDOW_NAME" >> "$GITHUB_ENV"
           echo "TF_VAR_advisory_id=$ADVISORY_ID" >> "$GITHUB_ENV"
           echo "TF_VAR_releasever=$RELEASEVER" >> "$GITHUB_ENV"
           echo "TF_VAR_patch_packages=$PACKAGES_JSON" >> "$GITHUB_ENV"
           echo "TF_VAR_restart_services=$RESTART_SERVICES" >> "$GITHUB_ENV"
           echo "TF_VAR_target_tags=$TAGS_JSON" >> "$GITHUB_ENV"
-          echo "Targeting ${TAGS_JSON} in ${REGION}, schedule ${SCHEDULE}, patching ${ADVISORY_ID} (${RELEASEVER}) on ${PACKAGES_JSON}, restart services: ${RESTART_SERVICES}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Window ${WINDOW_NAME}: targeting ${TAGS_JSON} in ${REGION}, schedule ${SCHEDULE}, patching ${ADVISORY_ID} (${RELEASEVER}) on ${PACKAGES_JSON}, restart services: ${RESTART_SERVICES}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Format check
         run: terraform fmt -check -recursive

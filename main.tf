@@ -13,8 +13,8 @@ locals {
 }
 
 resource "aws_ssm_maintenance_window" "this" {
-  name                       = var.name
-  description                = var.description
+  name                       = trimspace(var.name)
+  description                = coalesce(var.description, trimspace(var.name))
   schedule                   = trimspace(var.schedule)
   schedule_timezone          = var.schedule_timezone
   duration                   = var.duration

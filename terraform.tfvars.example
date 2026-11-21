@@ -6,3 +6,6 @@ advisory_id       = "ALAS2023-2026-3478"
 releasever        = "2023.12.20261117"
 patch_packages    = ["java-17-amazon-corretto"]
 restart_services  = true # false = patch only, never restart
+schedule          = "cron(43 05 ? * FRI#1 *)" # the pipeline passes this from its schedule input
+name              = "CVE-2026-111497" # the pipeline passes this from its window_name input
+region            = "us-west-2" # the pipeline passes this from its aws_region input
