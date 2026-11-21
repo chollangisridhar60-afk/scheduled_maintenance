@@ -1,0 +1,52 @@
+resource "aws_ssm_maintenance_window" "this" {
+  name                       = var.name
+  description                = var.description
+  schedule                   = var.schedule
+  schedule_timezone          = var.schedule_timezone
+  duration                   = var.duration
+  cutoff                     = var.cutoff
+  enabled                    = var.enabled
+  allow_unassociated_targets = false
+  tags                       = var.tags
+}
+
+resource "aws_ssm_maintenance_window_target" "this" {
+  window_id     = aws_ssm_maintenance_window.this.id
+  resource_type = "INSTANCE"
+
+  targets {
+    key    = "tag:${var.target_tag_key}"
+    values = var.target_tag_values
+  }
+}
+
+resource "aws_ssm_maintenance_window_task" "patch" {
+  window_id        = aws_ssm_maintenance_window.this.id
+  task_type        = "RUN_COMMAND"
+  task_arn         = "AWS-RunShellScript"
+  priority         = var.task_priority
+  service_role_arn = var.service_role_arn
+  max_concurrency  = var.max_concurrency
+  max_errors       = var.max_errors
+
+  targets {
+    key    = "WindowTargetIds"
+    values = [aws_ssm_maintenance_window_target.this.id]
+  }
+
+  task_invocation_parameters {
+    run_command_parameters {
+      timeout_seconds  = var.command_timeout_seconds
+      document_version = "$DEFAULT"
+
+      parameter {
+        name   = "commands"
+        values = [file("${path.module}/scripts/patch_brotli.sh")]
+      }
+      parameter {
+        name   = "executionTimeout"
+        values = [var.execution_timeout]
+      }
+    }
+  }
+}
