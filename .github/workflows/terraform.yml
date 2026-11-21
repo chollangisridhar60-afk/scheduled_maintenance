@@ -3,13 +3,10 @@ name: Terraform
 on:
   workflow_dispatch:
     inputs:
-      target_tag_key:
-        description: "Tag key used to select instances (e.g. Patch Group)"
+      target_tags:
+        description: "Target tags as key=value1,value2 ; key2=value (e.g. Patch Group=qa-ema-rest;env=dev). Instances must match ALL keys"
         required: true
-        type: string
-      target_tag_values:
-        description: "Tag values, comma-separated (e.g. qa-ema-rest or qa-ema-rest,qa-ema-web)"
-        required: true
+        default: "Patch Group=qa-ema-rest"
         type: string
       aws_region:
         description: "AWS region"
@@ -71,8 +68,7 @@ jobs:
 
       - name: Resolve parameters
         env:
-          TAG_KEY: ${{ inputs.target_tag_key }}
-          TAG_VALUES: ${{ inputs.target_tag_values }}
+          TARGET_TAGS: ${{ inputs.target_tags }}
           REGION: ${{ inputs.aws_region }}
           SCHEDULE: ${{ inputs.schedule }}
           ADVISORY_ID: ${{ inputs.advisory_id }}
@@ -81,16 +77,20 @@ jobs:
           RESTART_SERVICES: ${{ inputs.restart_services }}
         run: |
           PACKAGES_JSON=$(printf '%s' "$PACKAGES" | jq -Rc 'split(",") | map(gsub("^\\s+|\\s+$";"")) | map(select(length>0))')
-          VALUES_JSON=$(printf '%s' "$TAG_VALUES" | jq -Rc 'if startswith("[") then fromjson else split(",") | map(gsub("^\\s+|\\s+$";"")) | map(select(length>0)) end')
+          case "$TARGET_TAGS" in
+            "{"*) ;;
+            *=*) ;;
+            *) echo "::error::target_tags must look like 'key=value1,value2;key2=value' (or a JSON object)"; exit 1 ;;
+          esac
+          TAGS_JSON=$(printf '%s' "$TARGET_TAGS" | jq -Rc 'if startswith("{") then fromjson else split(";") | map(select(length>0)) | map(split("=")) | map({key:(.[0]|gsub("^\\s+|\\s+$";"")), value:((.[1] // "")|split(",")|map(gsub("^\\s+|\\s+$";""))|map(select(length>0)))}) | from_entries end')
           echo "TF_VAR_region=$REGION" >> "$GITHUB_ENV"
           echo "TF_VAR_schedule=$SCHEDULE" >> "$GITHUB_ENV"
           echo "TF_VAR_advisory_id=$ADVISORY_ID" >> "$GITHUB_ENV"
           echo "TF_VAR_releasever=$RELEASEVER" >> "$GITHUB_ENV"
           echo "TF_VAR_patch_packages=$PACKAGES_JSON" >> "$GITHUB_ENV"
           echo "TF_VAR_restart_services=$RESTART_SERVICES" >> "$GITHUB_ENV"
-          echo "TF_VAR_target_tag_key=$TAG_KEY" >> "$GITHUB_ENV"
-          echo "TF_VAR_target_tag_values=$VALUES_JSON" >> "$GITHUB_ENV"
-          echo "Targeting tag:${TAG_KEY} = ${VALUES_JSON} in ${REGION}, schedule ${SCHEDULE}, patching ${ADVISORY_ID} (${RELEASEVER}) on ${PACKAGES_JSON}, restart services: ${RESTART_SERVICES}" >> "$GITHUB_STEP_SUMMARY"
+          echo "TF_VAR_target_tags=$TAGS_JSON" >> "$GITHUB_ENV"
+          echo "Targeting ${TAGS_JSON} in ${REGION}, schedule ${SCHEDULE}, patching ${ADVISORY_ID} (${RELEASEVER}) on ${PACKAGES_JSON}, restart services: ${RESTART_SERVICES}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Format check
         run: terraform fmt -check -recursive

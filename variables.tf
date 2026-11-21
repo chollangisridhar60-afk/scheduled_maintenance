@@ -43,14 +43,14 @@ variable "enabled" {
   default     = false
 }
 
-variable "target_tag_key" {
-  description = "Tag key used to select instances (e.g. Patch Group)"
-  type        = string
-}
+variable "target_tags" {
+  description = "Tags used to select instances: map of tag key => list of accepted values. Instances must match ALL keys (AND); within a key any value matches (OR). SSM allows up to 5 keys. e.g. { \"Patch Group\" = [\"qa-ema-rest\"], env = [\"dev\"] }"
+  type        = map(list(string))
 
-variable "target_tag_values" {
-  description = "Tag values to match"
-  type        = list(string)
+  validation {
+    condition     = length(var.target_tags) >= 1 && length(var.target_tags) <= 5 && alltrue([for k, v in var.target_tags : length(v) >= 1])
+    error_message = "target_tags needs 1 to 5 tag keys, each with at least one value."
+  }
 }
 
 variable "service_role_arn" {

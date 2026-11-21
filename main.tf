@@ -28,9 +28,12 @@ resource "aws_ssm_maintenance_window_target" "this" {
   window_id     = aws_ssm_maintenance_window.this.id
   resource_type = "INSTANCE"
 
-  targets {
-    key    = "tag:${var.target_tag_key}"
-    values = var.target_tag_values
+  dynamic "targets" {
+    for_each = var.target_tags
+    content {
+      key    = "tag:${targets.key}"
+      values = targets.value
+    }
   }
 }
 
