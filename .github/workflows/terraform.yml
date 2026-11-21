@@ -1,0 +1,112 @@
+name: Terraform
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_tag_key:
+        description: "Tag key used to select instances (e.g. Patch Group)"
+        required: true
+        default: "Patch Group"
+        type: string
+      target_tag_values:
+        description: "Tag values, comma-separated (e.g. qa-ema-rest or qa-ema-rest,qa-ema-web)"
+        required: true
+        default: "qa-ema-rest"
+        type: string
+      aws_region:
+        description: "AWS region"
+        required: true
+        default: "us-west-2"
+        type: choice
+        options:
+          - us-east-1 # N. Virginia
+          - us-east-2 # Ohio
+          - us-west-1 # N. California
+          - us-west-2 # Oregon
+
+permissions:
+  id-token: write # OIDC to AWS
+  contents: read
+
+env:
+  TF_IN_AUTOMATION: "true"
+
+concurrency:
+  group: terraform-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Validate & Plan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.x
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Resolve parameters
+        env:
+          TAG_KEY: ${{ inputs.target_tag_key }}
+          TAG_VALUES: ${{ inputs.target_tag_values }}
+          REGION: ${{ inputs.aws_region }}
+        run: |
+          VALUES_JSON=$(printf '%s' "$TAG_VALUES" | jq -Rc 'if startswith("[") then fromjson else split(",") | map(gsub("^\\s+|\\s+$";"")) | map(select(length>0)) end')
+          echo "TF_VAR_region=$REGION" >> "$GITHUB_ENV"
+          echo "TF_VAR_target_tag_key=$TAG_KEY" >> "$GITHUB_ENV"
+          echo "TF_VAR_target_tag_values=$VALUES_JSON" >> "$GITHUB_ENV"
+          echo "Targeting tag:${TAG_KEY} = ${VALUES_JSON} in ${REGION}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Format check
+        run: terraform fmt -check -recursive
+
+      - name: Init
+        run: terraform init -input=false
+
+      - name: Validate
+        run: terraform validate
+
+      - name: Plan
+        run: terraform plan -input=false -no-color -out=tfplan
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: tfplan
+          retention-days: 1
+
+  apply:
+    name: Apply
+    needs: plan
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # Create an environment named "production" with required reviewers
+    # (Settings > Environments) so apply waits for manual approval.
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.x
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+
+      - name: Init
+        run: terraform init -input=false
+
+      - name: Apply
+        run: terraform apply -input=false -auto-approve tfplan

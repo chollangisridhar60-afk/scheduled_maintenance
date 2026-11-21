@@ -55,7 +55,7 @@ variable "target_tag_values" {
 
 variable "service_role_arn" {
   type    = string
-  default = "arn:aws:iam::897138222775:role/mmPatchingExecutionRoleForSSM"
+  default = "arn:aws:iam::707582904453:role/mmPatchingExecutionRoleForSSM"
 }
 
 variable "max_concurrency" {
