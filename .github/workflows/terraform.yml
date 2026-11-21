@@ -6,12 +6,12 @@ on:
       target_tag_key:
         description: "Tag key used to select instances (e.g. Patch Group)"
         required: true
-        default: "Patch Group"
+        default: "env"
         type: string
       target_tag_values:
         description: "Tag values, comma-separated (e.g. qa-ema-rest or qa-ema-rest,qa-ema-web)"
         required: true
-        default: "qa-ema-rest"
+        default: "dev"
         type: string
       aws_region:
         description: "AWS region"
