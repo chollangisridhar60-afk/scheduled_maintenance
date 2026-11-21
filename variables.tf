@@ -15,9 +15,9 @@ variable "description" {
 }
 
 variable "schedule" {
-  description = "Cron/rate/at expression. For a one-time run use e.g. at(2026-12-04T05:43:00)."
+  description = "Cron/rate/at expression. UTC: Saturday, Nov 21, 2026 — 10:49 AM."
   type        = string
-  default     = "cron(43 05 ? * FRI#1 *)"
+  default     = "cron(51 5 ? * SAT#3 *)"
 
   validation {
     condition     = can(regex("^(cron|rate|at)\\(.+\\)$", trimspace(var.schedule)))
